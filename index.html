@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grow a Garden</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to bottom, #87CEEB, #90EE90);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #228B22;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        #stats {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px 0;
+            background: rgba(255,255,255,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #stats div {
+            margin: 10px 0;
+        }
+        #farm {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 900px;
+            margin: 20px auto;
+        }
+        .plot {
+            flex: 0 0 140px;
+            height: 200px;
+            border: 3px solid #8B4513;
+            margin: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            background: linear-gradient(to bottom, #F0F8F0, #D2F0D2);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            font-size: 22px;
+            position: relative;
+        }
+        .plot button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 14px;
+            margin-top: 5px;
+            width: 90%;
+        }
+        .plot button:hover:not(:disabled) {
+            background: #45a049;
+        }
+        .progress-bar {
+            width: 90%;
+            height: 12px;
+            background: #ddd;
+            margin: 8px auto;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(to right, #FFD700, #32CD32);
+            border-radius: 6px;
+            transition: width 0.5s ease;
+        }
+        #shop {
+            text-align: center;
+            margin: 30px 0;
+        }
+        #shop button {
+            padding: 15px 30px;
+            font-size: 20px;
+            margin: 10px;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            min-width: 200px;
+        }
+        #shop button:hover:not(:disabled) {
+            background: #F57C00;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        @media (max-width: 600px) {
+            .plot {
+                flex: 0 0 120px;
+                height: 170px;
+                font-size: 18px;
+            }
+            #stats {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🌱 Grow a Garden 🌾</h1>
+    <div id="stats">
+        <div>Pieniądze: <span id="moneySpan">0</span> $</div>
+        <div>Nasiona: <span id="seedsSpan">0</span></div>
+        <div>Poziom boostu: <span id="boostSpan">0</span></div>
+    </div>
+    <div id="farm">
+        <!-- Pola będą tutaj generowane dynamicznie -->
+    </div>
+    <div id="shop">
+        <button id="buySeedsBtn" onclick="buySeedsFunc()">Kup nasiona (10$)</button><br>
+        <button id="expandBtn" onclick="expandFunc()">Rozszerz farmę</button><br>
+        <button id="boostBtn" onclick="buyBoostFunc()">Kup boost</button>
+    </div>
+
+    <script>
+        let game = {
+            money: 0,
+            seeds: 0,
+            boostLevel: 0,
+            plots: []
+        };
+
+        const defaultGame = {
+            money: 0,
+            seeds: 0,
+            boostLevel: 0,
+            plots: [{ status: 'empty' }]
+        };
+
+        function save() {
+            localStorage.setItem('growagarden', JSON.stringify(game));
+        }
+
+        function load() {
+            const saved = localStorage.getItem('growagarden');
+            if (saved) {
+                game = JSON.parse(saved);
+            } else {
+                game = { ...defaultGame };
+            }
+            // Napraw stare zapisy
+            for (let plot of game.plots) {
+                if (plot.status === 'growing') {
+                    if (!plot.duration || Date.now() >= plot.endTime) {
+                        plot.status = 'ready';
+                    }
+                }
+                // Czyść niepotrzebne pola dla pustych/gotowych
+                if (plot.status !== 'growing') {
+                    delete plot.duration;
+                    delete plot.endTime;
+                }
+            }
+        }
+
+        function getGrowthTime() {
+            return 10000 / (1 + 0.5 * game.boostLevel); // 10s bazowo, boost skraca
+        }
+
+        function getYield() {
+            return 20 * (1 + 0.2 * game.boostLevel); // 20$ bazowo, boost zwiększa
+        }
+
+        function update() {
+            const now = Date.now();
+            for (let plot of game.plots) {
+                if (plot.status === 'growing' && now >= plot.endTime) {
+                    plot.status = 'ready';
+                }
+            }
+            render();
+            save();
+        }
+
+        function render() {
+            document.getElementById('moneySpan').textContent = Math.floor(game.money);
+            document.getElementById('seedsSpan').textContent = game.seeds;
+            document.getElementById('boostSpan').textContent = game.boostLevel;
+
+            const farm = document.getElementById('farm');
+            farm.innerHTML = '';
+            game.plots.forEach((plot, index) => {
+                const div = document.createElement('div');
+                div.className = 'plot';
+                const now = Date.now();
+                if (plot.status === 'empty') {
+                    div.innerHTML = `
+                        ⬜<br>
+                        Puste pole<br>
+                        <button onclick="plant(${index})">Posadź</button>
+                    `;
+                } else if (plot.status === 'growing') {
+                    const elapsed = now - (plot.endTime - plot.duration);
+                    let progress = Math.floor((elapsed / plot.duration) * 100);
+                    progress = Math.max(0, Math.min(100, progress));
+                    div.innerHTML = `
+                        🌱<br>
+                        Rośnie ${progress}%<br>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    `;
+                } else { // ready
+                    div.innerHTML = `
+                        🌾<br>
+                        Gotowe!<br>
+                        <button onclick="harvest(${index})">Zbieraj</button>
+                    `;
+                }
+                farm.appendChild(div);
+            });
+
+            // Sklep
+            document.getElementById('buySeedsBtn').textContent = 'Kup nasiona (10$)';
+            document.getElementById('buySeedsBtn').disabled = game.money < 10;
+
+            const expandCost = 100 * game.plots.length;
+            document.getElementById('expandBtn').textContent = `Rozszerz farmę (${expandCost}$)`;
+            document.getElementById('expandBtn').disabled = game.money < expandCost;
+
+            const boostCost = 50 * (game.boostLevel + 1);
+            document.getElementById('boostBtn').textContent = `Kup boost (${boostCost}$)`;
+            document.getElementById('boostBtn').disabled = game.money < boostCost;
+        }
+
+        window.plant = function(index) {
+            if (game.plots[index].status !== 'empty' || game.seeds <= 0) return;
+            game.seeds--;
+            const duration = getGrowthTime();
+            game.plots[index].status = 'growing';
+            game.plots[index].endTime = Date.now() + duration;
+            game.plots[index].duration = duration;
+            render();
+        };
+
+        window.harvest = function(index) {
+            if (game.plots[index].status !== 'ready') return;
+            game.money += getYield();
+            game.plots[index].status = 'empty';
+            delete game.plots[index].endTime;
+            delete game.plots[index].duration;
+            render();
+        };
+
+        window.buySeedsFunc = function() {
+            if (game.money < 10) return;
+            game.money -= 10;
+            game.seeds++;
+            render();
+        };
+
+        window.expandFunc = function() {
+            const cost = 100 * game.plots.length;
+            if (game.money < cost) return;
+            game.money -= cost;
+            game.plots.push({ status: 'empty' });
+            render();
+        };
+
+        window.buyBoostFunc = function() {
+            const cost = 50 * (game.boostLevel + 1);
+            if (game.money < cost) return;
+            game.money -= cost;
+            game.boostLevel++;
+            render();
+        };
+
+        // Inicjalizacja
+        load();
+        render();
+        setInterval(update, 1000);
+    </script>
+</body>
+</html>
